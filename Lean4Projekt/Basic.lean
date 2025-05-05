@@ -18,7 +18,7 @@ theorem generic_diag (hadd : (1:K) + (1:K) ≠ (0:K)) (hsymm : β.IsSymm):
   sorry
 
 theorem nullraum (B : Basis (Fin (Module.finrank K V)) K V) (hdiag : Matrix.IsDiag (BilinForm.toMatrix B β)) (v : V):
-    forall w : V, β v w = 0 <-> True -- span formalisieren
+    forall w : V, β v w = 0 <-> ↑(B.repr v).support ⊆ {i | β (B i) (B i) = 0}
      := by sorry
 
 end
@@ -29,7 +29,7 @@ section
 variable {V : Type*} [AddCommGroup V] [Module ℂ V]
 variable (β : LinearMap.BilinForm ℂ V)
 
-theorem sylvester_c (B B' : Basis (Fin (Module.finrank ℂ V)) ℂ V):
+theorem sylvester_c (B B' : Basis (Fin (Module.finrank ℂ V)) ℂ V) (hdiagB : Matrix.IsDiag (BilinForm.toMatrix B β)) (hdiagB' : Matrix.IsDiag (BilinForm.toMatrix B' β)):
     True := by
   sorry
 
