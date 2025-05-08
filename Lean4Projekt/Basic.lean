@@ -5,11 +5,13 @@ import Mathlib.LinearAlgebra.BilinearForm.Properties
 import Mathlib.Data.Real.Basic
 import Mathlib.Data.Complex.Basic
 import Mathlib.LinearAlgebra.StdBasis
+import Mathlib.Algebra.Order.Field.Basic
 
 section
-variable {K : Type*} [Field K]
+variable {K : Type*} [LinearOrderedField K]
 variable {V : Type*} [AddCommGroup V] [Module K V] [FiniteDimensional K V]
 variable (β : LinearMap.BilinForm K V)
+
 
 
 theorem generic_diag (hadd : (1:K) + (1:K) ≠ (0:K)) (hsymm : β.IsSymm):
@@ -25,12 +27,18 @@ end
 
 section
 
+variable {V : Type*} [AddCommGroup V] [Module ℝ V] [FiniteDimensional ℝ V]
+variable (r_pos r_neg r_zero : Nat)
+def d (i : Fin (Module.finrank ℝ V)): ℝ := if i.toNat < r_pos then 1 else if i.toNat < r_pos + r_neg then -1 else 0
 
-variable {V : Type*} [AddCommGroup V] [Module ℂ V]
-variable (β : LinearMap.BilinForm ℂ V)
+variable (β : LinearMap.BilinForm ℝ V)
 
-theorem sylvester_c (B B' : Basis (Fin (Module.finrank ℂ V)) ℂ V) (hdiagB : Matrix.IsDiag (BilinForm.toMatrix B β)) (hdiagB' : Matrix.IsDiag (BilinForm.toMatrix B' β)):
-    True := by
+def MaxDim (n : Nat) (c : Submodule ℝ V → Prop) := (∀ W : Submodule ℝ V, c W → Module.finrank ℝ W ≤ n) ∧ (∃ W : Submodule ℝ V, (c W ∧ Module.finrank ℝ W = n))
+
+theorem sylvester (hpos  : MaxDim r_pos  (∀ w ∈ ·, w ≠ 0 → (β w w > 0)))
+                  (hneg  : MaxDim r_neg  (∀ w ∈ ·, w ≠ 0 → (β w w < 0)))
+                  (hzero : MaxDim r_zero (∀ w ∈ ·, ∀ v : V, β w v = 0)):
+    ∃B : Basis (Fin (Module.finrank ℝ V)) ℝ V, Matrix.diagonal (d r_pos r_neg) = BilinForm.toMatrix B β := by
   sorry
 
 
