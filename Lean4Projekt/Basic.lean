@@ -59,9 +59,11 @@ noncomputable def gauss_seidel : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
   let A := Matrix.of (λ i j => if j ≤ i then 0 else M i j)
   to_affine (-B⁻¹ * A) (B⁻¹ *ᵥ b)
 
-def p (i : ι) : ℝ :=
-    (∑ j ∈ { j < i | j ∈ Finset.univ}, ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ}, ‖(M i j)/(M i i)‖
-  termination_by (sorry)
+--def p (i : ι) : ℝ :=
+--    (∑ j ∈ { j < i | j ∈ Finset.univ}, ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ}, ‖(M i j)/(M i i)‖
+--  termination_by (sorry)
+
+def p (i : ι) : ℝ := 0
 
 theorem iter_conv_gauss_seidel (heq : M *ᵥ x = b) (hspec: ρ (gauss_seidel M b) < 1):
     Filter.Tendsto (fun n => (gauss_seidel M b).toFun^[n] v₀) Filter.atTop (nhds x) := by
