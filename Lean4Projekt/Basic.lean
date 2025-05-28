@@ -1,66 +1,72 @@
-import Mathlib.LinearAlgebra.Matrix.IsDiag
-import Mathlib.LinearAlgebra.BilinearForm.Basic
-import Mathlib.LinearAlgebra.Matrix.BilinearForm
-import Mathlib.LinearAlgebra.BilinearForm.Properties
-import Mathlib.Data.Real.Basic
-import Mathlib.Data.Complex.Basic
-import Mathlib.LinearAlgebra.StdBasis
-import Mathlib.Algebra.Order.Field.Basic
+import Mathlib.Analysis.Normed.Field.Basic
+import Mathlib.Analysis.NormedSpace.OperatorNorm.Basic
+import Mathlib.Analysis.Normed.Algebra.Spectrum
+import Mathlib.Topology.Basic
+import Mathlib.Topology.MetricSpace.Basic
+import Mathlib.LinearAlgebra.FiniteDimensional.Basic
+import Mathlib.LinearAlgebra.Matrix.ToLin
+import Mathlib.LinearAlgebra.AffineSpace.AffineMap
+import Mathlib.Data.Matrix.Notation
+import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Fintype.Basic
+import Mathlib.Data.Finset.Card
+import Mathlib.Data.Matrix.Reflection
 
-section
-variable {K : Type*} [LinearOrderedField K]
-variable {V : Type*} [AddCommGroup V] [Module K V] [FiniteDimensional K V]
-variable (β : LinearMap.BilinForm K V)
+open Matrix
+variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜] [Countable 𝕜]
+variable {ι : Type*} [Fintype ι] [DecidableEq ι] [PartialOrder ι] [DecidableLE ι] [LocallyFiniteOrderTop ι] [LocallyFiniteOrderBot ι]
 
+variable (v₀ : (ι → 𝕜))
+variable (x : (ι → 𝕜))
 
+noncomputable def ρ (φ : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜)) := spectralRadius 𝕜 (φ.linear.toContinuousLinearMap)
 
-theorem generic_diag (hadd : (1:K) + (1:K) ≠ (0:K)) (hsymm : β.IsSymm):
-    ∃B : Basis (Fin (Module.finrank K V)) K V, Matrix.IsDiag (BilinForm.toMatrix B β)
-  := by
+variable (φ : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜))
+
+theorem iter_conv (heq : x = φ x) (hspec: ρ φ < 1):
+    Filter.Tendsto (fun n => φ.toFun^[n] v₀) Filter.atTop (nhds x) := by
   sorry
 
-theorem nullraum (B : Basis (Fin (Module.finrank K V)) K V) (hdiag : Matrix.IsDiag (BilinForm.toMatrix B β)) (v : V):
-    forall w : V, β v w = 0 <-> ↑(B.repr v).support ⊆ {i | β (B i) (B i) = 0}
-     := by sorry
+variable (M : Matrix ι ι 𝕜)
+variable (b : ι → 𝕜)
 
-end
+noncomputable def to_affine : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
+  AffineMap.mk
+    (fun v => M *ᵥ v + b)
+    (Matrix.toLin' M)
+    (by
+      intro p v
+      simp
+      rw [←add_assoc (M *ᵥ v), ←mulVec_add])
 
-section
+noncomputable def jacobi : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
+  to_affine (λ i j => if i = j then 0 else -(M i i)⁻¹ * (M i j)) (λ i => (M i i)⁻¹ * (b i))
 
-variable {V : Type*} [AddCommGroup V] [Module ℝ V] [FiniteDimensional ℝ V]
-variable (r_pos r_neg r_zero : Nat)
-def d (i : Fin (Module.finrank ℝ V)): ℝ := if i.toNat < r_pos then 1 else if i.toNat < r_pos + r_neg then -1 else 0
-
-variable (β : LinearMap.BilinForm ℝ V)
-
-def MaxDim (n : Nat) (c : Submodule ℝ V → Prop) := (∀ W : Submodule ℝ V, c W → Module.finrank ℝ W ≤ n) ∧ (∃ W : Submodule ℝ V, (c W ∧ Module.finrank ℝ W = n))
-
-theorem sylvester (hpos  : MaxDim r_pos  (∀ w ∈ ·, w ≠ 0 → (β w w > 0)))
-                  (hneg  : MaxDim r_neg  (∀ w ∈ ·, w ≠ 0 → (β w w < 0)))
-                  (hzero : MaxDim r_zero (∀ w ∈ ·, ∀ v : V, β w v = 0)):
-    ∃B : Basis (Fin (Module.finrank ℝ V)) ℝ V, Matrix.diagonal (d r_pos r_neg) = BilinForm.toMatrix B β := by
+theorem iter_conv_jacobi (heq : M *ᵥ x = b) (hspec: ρ (jacobi M b) < 1):
+    Filter.Tendsto (fun n => (jacobi M b).toFun^[n] v₀) Filter.atTop (nhds x) := by
   sorry
 
+@[simp]
+def diag_dominant :=
+  ∀ i : ι, (∑ j ∈ Finset.univ.erase i, ‖M i j‖) < ‖M i i‖
 
-end
+theorem jacobi_conv_diag_dominant (h : diag_dominant (λ i j => if i = j then 0 else -(M i i)⁻¹ * (M i j))):
+    ρ (jacobi M b) < 1 := by
+  sorry
 
--- variable {V : Type*} [AddCommGroup V] [Module ℝ V] [FiniteDimensional ℝ V]
+noncomputable def gauss_seidel : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
+  let B := Matrix.of (λ i j => if j ≤ i then M i j else 0)
+  let A := Matrix.of (λ i j => if j ≤ i then 0 else M i j)
+  to_affine (-B⁻¹ * A) (B⁻¹ *ᵥ b)
 
---variable (β : LinearMap.BilinForm ℝ V)
---variable (B : Basis (Fin (Module.finrank ℝ V)) ℝ V)
+def p (i : ι) : ℝ :=
+    (∑ j ∈ { j < i | j ∈ Finset.univ}, ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ}, ‖(M i j)/(M i i)‖
+  termination_by (sorry)
 
--- theorem bilin_diag (h : β.IsSymm):
---    ∃B : Basis (Fin (Module.finrank ℝ V)) ℝ V, Matrix.IsDiag (BilinForm.toMatrix B β)
---  := by
---    sorry
+theorem iter_conv_gauss_seidel (heq : M *ᵥ x = b) (hspec: ρ (gauss_seidel M b) < 1):
+    Filter.Tendsto (fun n => (gauss_seidel M b).toFun^[n] v₀) Filter.atTop (nhds x) := by
+  sorry
 
---theorem vvv (h : β.IsSymm) (h₁ : Matrix.IsDiag (BilinForm.toMatrix B β)):
-
-
---theorem sylvester (h : β.IsSymm):
---    ∃d : Fin (Module.finrank ℝ V) → ℝ,
---    ∀x : Fin (Module.finrank ℝ V), d x = 1 ∨ d x = -1 ∨ d x = 0 →
---      ∃B : Basis (Fin (Module.finrank ℝ V)) ℝ V,
---        BilinForm.toMatrix B β = Matrix.diagonal d
---  := by
---  sorry
+theorem sassenfeld_crit (h : ∀ i : ι, p i < 1):
+    ρ (gauss_seidel M b) < 1 := by
+  sorry
