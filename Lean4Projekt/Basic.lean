@@ -1,6 +1,7 @@
 import Mathlib.Analysis.Normed.Field.Basic
 import Mathlib.Analysis.NormedSpace.OperatorNorm.Basic
 import Mathlib.Analysis.Normed.Algebra.Spectrum
+import Mathlib.Analysis.Matrix
 import Mathlib.Topology.Basic
 import Mathlib.Topology.MetricSpace.Basic
 import Mathlib.Topology.MetricSpace.Contracting
@@ -12,84 +13,128 @@ import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Finset.Card
 import Mathlib.Data.Matrix.Reflection
+import Mathlib.LinearAlgebra.Matrix.Block
 
 open Matrix
-variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜] [Countable 𝕜]
-variable {ι : Type*} [Fintype ι] [DecidableEq ι] [PartialOrder ι] [DecidableLT ι] [DecidableLE ι] [LocallyFiniteOrderTop ι] [LocallyFiniteOrderBot ι]
+variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜]
+variable {ι : Type*} [Fintype ι] [DecidableEq ι]
 
-variable (v₀ : (ι → 𝕜))
-variable (x : (ι → 𝕜))
+structure ConvIter (ι 𝕜 : Type*) [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜] [Fintype ι] [DecidableEq ι] where
+  A : Matrix ι ι 𝕜
+  M : Matrix ι ι 𝕜
+  N : Matrix ι ι 𝕜
+  b : ι → 𝕜
+  eq   : A = M + N
+  inv  : Invertible M
+  spec : ‖(-M⁻¹ * N).toLin'.toContinuousLinearMap‖₊ < 1
 
-noncomputable def ρ (φ : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜)) := spectralRadius 𝕜 (φ.linear.toContinuousLinearMap)
+noncomputable def ConvIter.toFun (self : ConvIter ι 𝕜) (v: ι → 𝕜) := (- self.M⁻¹ * self.N) *ᵥ v + self.M⁻¹ *ᵥ self.b
 
-variable (φ : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜))
+theorem iter_contracting (it : ConvIter ι 𝕜) :
+    ContractingWith ‖(-it.M⁻¹ * it.N).toLin'.toContinuousLinearMap‖₊ it.toFun := by
+  have hl : LipschitzWith ‖(-it.M⁻¹ * it.N).toLin'.toContinuousLinearMap‖₊ it.toFun := by
+    dsimp [LipschitzWith, ConvIter.toFun]
+    intro v w
+    rw [edist_add_right]
+    apply ContinuousLinearMap.lipschitz
+  exact ⟨it.spec, hl⟩
 
-#check edist
-
-theorem iter_conv (hspec: ‖φ.linear.toContinuousLinearMap‖₊ < 1):
-    ∃ x : ι → 𝕜, Filter.Tendsto (fun n => φ.toFun^[n] v₀) Filter.atTop (nhds x) := by
-  have hz : ∀ v : ι → 𝕜, v = v +ᵥ (λ _ => (0 : 𝕜)) := by
-    intro v
-    simp [Pi.zero_def]“
-    let K := ContinuousLinearMap.lipschitz φ.linear.toContinuousLinearMap
-    simp[LipschitzWith] at K
-    specialize K v w
-    rw [edist_nndist, nndist_edist] at K
-    exact K
-  have hf: ContractingWith ‖φ.linear.toContinuousLinearMap‖₊ φ.toFun := ⟨hspec, hl⟩
-  let ⟨x, _, hr, _⟩ := ContractingWith.exists_fixedPoint hf v₀ (edist_ne_top v₀ (φ.toFun v₀))
+theorem iter_conv (it : ConvIter ι 𝕜) (v : ι → 𝕜):
+    ∃ x : ι → 𝕜, Filter.Tendsto (fun n => it.toFun^[n] v) Filter.atTop (nhds x) := by
+  let ⟨x, _, hr, _⟩ := ContractingWith.exists_fixedPoint (iter_contracting it) v (edist_ne_top v (it.toFun v))
   exact ⟨x, hr⟩
 
+theorem helper (it : ConvIter ι 𝕜) (x : ι → 𝕜) (heq: it.A *ᵥ x = it.b):
+    Function.IsFixedPt it.toFun x := by
+  let inv := it.inv
+  rw [it.eq, add_mulVec] at heq
+  apply eq_sub_of_add_eq at heq
+  apply congr_arg (it.M⁻¹ *ᵥ ·) at heq
+  rw [mulVec_mulVec, inv_mul_of_invertible, one_mulVec, mulVec_sub, mulVec_mulVec] at heq
+  simp [Function.IsFixedPt]
+  rw [sub_eq_add_neg, ←neg_mulVec] at heq
+  simp only [ConvIter.toFun, neg_mul]
+  rw [add_comm, ←heq]
 
-variable (M : Matrix ι ι 𝕜)
-variable (b : ι → 𝕜)
+theorem iter_tendsto (it : ConvIter ι 𝕜) (v x : ι → 𝕜) (h: it.A *ᵥ x = it.b):
+    Filter.Tendsto (fun n ↦ it.toFun^[n] v) Filter.atTop (nhds x) := by
+  let ⟨x', hic⟩ := iter_conv it v
+  have : Filter.Tendsto (fun (n:Nat) => x) Filter.atTop (nhds x) := tendsto_const_nhds
+  have hf: (fun n => it.toFun^[n] x) = (fun n => x) := by
+    funext n
+    exact Function.iterate_fixed (helper it x h) n
+  rw [←hf] at this
+  have hf : ContractingWith ‖(-it.M⁻¹ * it.N).toLin'.toContinuousLinearMap‖₊ it.toFun :=
+    iter_contracting it
+  let hxfp := ContractingWith.tendsto_iterate_fixedPoint hf v
+  rw [←ContractingWith.fixedPoint_unique hf (helper it x h)] at hxfp
+  assumption
 
-noncomputable def to_affine : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
-  ⟨(λ v => M *ᵥ v + b), (Matrix.toLin' M), (λ p v => by simp; rw [←add_assoc, ←mulVec_add])⟩
-
-noncomputable def jacobi : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
-  to_affine (λ i j => if i = j then 0 else -(M i i)⁻¹ * (M i j)) (λ i => (M i i)⁻¹ * (b i))
-
-theorem iter_conv_jacobi (heq : M *ᵥ x = b) (hspec: ‖(jacobi M b).linear.toContinuousLinearMap‖₊ < 1):
-    Filter.Tendsto (fun n => (jacobi M b).toFun^[n] v₀) Filter.atTop (nhds x) := by
-  let ⟨x', hconv⟩ := iter_conv v₀ (jacobi M b) hspec
-  have h : x' = x := by
-    simp [jacobi] at hconv
-    sorry
-  rw [h] at hconv
-  exact hconv
-
-@[simp]
-def diag_dominant :=
+def diag_dominant (M : Matrix ι ι 𝕜) :=
   ∀ i : ι, (∑ j ∈ Finset.univ.erase i, ‖M i j‖) < ‖M i i‖
 
-theorem jacobi_conv_diag_dominant (h : diag_dominant (jacobi M b).linear.toMatrix'):
-    ‖(jacobi M b).linear.toContinuousLinearMap‖₊ < 1 := by
-  sorry
+variable (M : Matrix ι ι 𝕜) (b : ι → 𝕜)
 
-noncomputable def gauss_seidel : (ι → 𝕜) →ᵃ[𝕜] (ι → 𝕜) :=
-  let B := Matrix.of (λ i j => if j ≤ i then M i j else 0)
-  let A := Matrix.of (λ i j => if j ≤ i then 0 else M i j)
-  to_affine (-B⁻¹ * A) (B⁻¹ *ᵥ b)
+noncomputable def jacobi (hd : diag_dominant M) : ConvIter ι 𝕜 := {
+  A := M
+  M := (Matrix.diagonal M.diag)
+  N := M - (Matrix.diagonal M.diag)
+  b := b
+  eq := by simp
+  inv := by
+    apply invertibleOfIsUnitDet
+    rw [det_diagonal]
+    apply isUnit_iff_ne_zero.mpr
+    rw [Finset.prod_ne_zero_iff]
+    intro i _
+    by_contra! h
+    simp at *
+    dsimp [diag_dominant] at *
+    specialize hd i
+    simp [h] at hd
+    have h : 0 ≤ ∑ j, ‖M i j‖ := by
+      apply Finset.sum_nonneg
+      intro l
+      simp
+    exact lt_irrefl 0 (lt_of_le_of_lt h hd)
+  spec := by
+    sorry
+}
 
-def BIio (i : ι) : { s : Finset ι // ∀ j ∈ s, j < i } := ⟨Finset.Iio i, (λ _ h => Finset.mem_Iio.mp h)⟩
+variable [LinearOrder ι] [DecidableLT ι] [LocallyFiniteOrderBot ι] [LocallyFiniteOrderTop ι]
 
 def p (i : ι) : ℝ :=
-    (∑ j : BIio i, ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ }, ‖(M i j)/(M i i)‖
+    (∑ j : Finset.Iio i,
+    ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ }, ‖(M i j)/(M i i)‖
   termination_by (Finset.Iio i).card
   decreasing_by
     apply Finset.card_lt_card
-    let h := j.prop
-    dsimp [BIio] at h
     apply Finset.Iio_ssubset_Iio
-    exact Finset.mem_Iio.mp h
+    exact Finset.mem_Iio.mp j.prop
 
-#check p M
-
-theorem iter_conv_gauss_seidel (heq : M *ᵥ x = b) (hspec: ρ (gauss_seidel M b) < 1):
-    Filter.Tendsto (fun n => (gauss_seidel M b).toFun^[n] v₀) Filter.atTop (nhds x) := by
-  sorry
-
-theorem sassenfeld_crit (h : ∀ i : ι, p M i < 1):
-    ρ (gauss_seidel M b) < 1 := by
-  sorry
+noncomputable def gauss_seidel (h : ∀ i : ι, (p M i) < 1) (hnz : ∀ i : ι, M i i ≠ 0) : ConvIter ι 𝕜 := {
+  A := M
+  M := of fun i j => if i ≤ j then M i j else 0
+  N := of fun i j => if i ≤ j then 0 else M i j
+  b := b
+  eq := (by
+    funext i j
+    simp
+    split_ifs with h' <;> simp
+  )
+  inv := by
+    apply invertibleOfIsUnitDet
+    rw [det_of_upperTriangular]
+    · apply isUnit_iff_ne_zero.mpr
+      rw [Finset.prod_ne_zero_iff]
+      intro i _
+      simp [of_apply]
+      exact hnz i
+    · intro i j hij
+      simp [of_apply]
+      intro hle
+      exfalso
+      exact not_le.mpr hij hle
+  spec := by
+    sorry
+}
