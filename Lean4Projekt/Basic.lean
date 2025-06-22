@@ -1,32 +1,33 @@
+import Mathlib.Analysis.Matrix
+import Mathlib.Analysis.Normed.Algebra.Spectrum
 import Mathlib.Analysis.Normed.Field.Basic
 import Mathlib.Analysis.NormedSpace.OperatorNorm.Basic
-import Mathlib.Analysis.Normed.Algebra.Spectrum
-import Mathlib.Analysis.Matrix
+import Mathlib.Data.Matrix.Notation
+import Mathlib.Data.Matrix.Reflection
+import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Finset.Card
+import Mathlib.Data.Fintype.Basic
 import Mathlib.Topology.Basic
 import Mathlib.Topology.MetricSpace.Basic
 import Mathlib.Topology.MetricSpace.Contracting
-import Mathlib.LinearAlgebra.FiniteDimensional.Basic
-import Mathlib.LinearAlgebra.Matrix.ToLin
 import Mathlib.LinearAlgebra.AffineSpace.AffineMap
-import Mathlib.Data.Matrix.Notation
-import Mathlib.Data.Finset.Basic
-import Mathlib.Data.Fintype.Basic
-import Mathlib.Data.Finset.Card
-import Mathlib.Data.Matrix.Reflection
 import Mathlib.LinearAlgebra.Matrix.Block
+import Mathlib.LinearAlgebra.Matrix.ToLin
+import Mathlib.LinearAlgebra.FiniteDimensional.Basic
 
 open Matrix
-variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜]
-variable {ι : Type*} [Fintype ι] [DecidableEq ι]
 
 structure ConvIter (ι 𝕜 : Type*) [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜] [Fintype ι] [DecidableEq ι] where
   A : Matrix ι ι 𝕜
   M : Matrix ι ι 𝕜
-  N : Matrix ι ι 𝕜
+  N : Matrix ι ι 𝕜 := A - M
   b : ι → 𝕜
-  eq   : A = M + N
+  eq   : A = M + N := by simp
   inv  : Invertible M
   spec : ‖(-M⁻¹ * N).toLin'.toContinuousLinearMap‖₊ < 1
+
+variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜]
+variable {ι : Type*} [Fintype ι] [DecidableEq ι]
 
 noncomputable def ConvIter.toFun (self : ConvIter ι 𝕜) (v: ι → 𝕜) := (- self.M⁻¹ * self.N) *ᵥ v + self.M⁻¹ *ᵥ self.b
 
@@ -60,10 +61,10 @@ theorem iter_tendsto (it : ConvIter ι 𝕜) (v x : ι → 𝕜) (h: it.A *ᵥ x
     Filter.Tendsto (fun n ↦ it.toFun^[n] v) Filter.atTop (nhds x) := by
   let ⟨x', hic⟩ := iter_conv it v
   have : Filter.Tendsto (fun (n:Nat) => x) Filter.atTop (nhds x) := tendsto_const_nhds
-  have hf: (fun n => it.toFun^[n] x) = (fun n => x) := by
+  have hfe: (fun n => it.toFun^[n] x) = (fun n => x) := by
     funext n
     exact Function.iterate_fixed (helper it x h) n
-  rw [←hf] at this
+  rw [←hfe] at this
   have hf : ContractingWith ‖(-it.M⁻¹ * it.N).toLin'.toContinuousLinearMap‖₊ it.toFun :=
     iter_contracting it
   let hxfp := ContractingWith.tendsto_iterate_fixedPoint hf v
@@ -77,10 +78,8 @@ variable (M : Matrix ι ι 𝕜) (b : ι → 𝕜)
 
 noncomputable def jacobi (hd : diag_dominant M) : ConvIter ι 𝕜 := {
   A := M
-  M := (Matrix.diagonal M.diag)
-  N := M - (Matrix.diagonal M.diag)
+  M := (diagonal M.diag)
   b := b
-  eq := by simp
   inv := by
     apply invertibleOfIsUnitDet
     rw [det_diagonal]
@@ -104,8 +103,7 @@ noncomputable def jacobi (hd : diag_dominant M) : ConvIter ι 𝕜 := {
 variable [LinearOrder ι] [DecidableLT ι] [LocallyFiniteOrderBot ι] [LocallyFiniteOrderTop ι]
 
 def p (i : ι) : ℝ :=
-    (∑ j : Finset.Iio i,
-    ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ }, ‖(M i j)/(M i i)‖
+    (∑ j : Finset.Iio i, ‖(M i j)/(M i i)‖ * p j) + ∑ j ∈ { j > i | j ∈ Finset.univ }, ‖(M i j)/(M i i)‖
   termination_by (Finset.Iio i).card
   decreasing_by
     apply Finset.card_lt_card
@@ -115,13 +113,7 @@ def p (i : ι) : ℝ :=
 noncomputable def gauss_seidel (h : ∀ i : ι, (p M i) < 1) (hnz : ∀ i : ι, M i i ≠ 0) : ConvIter ι 𝕜 := {
   A := M
   M := of fun i j => if i ≤ j then M i j else 0
-  N := of fun i j => if i ≤ j then 0 else M i j
   b := b
-  eq := (by
-    funext i j
-    simp
-    split_ifs with h' <;> simp
-  )
   inv := by
     apply invertibleOfIsUnitDet
     rw [det_of_upperTriangular]
