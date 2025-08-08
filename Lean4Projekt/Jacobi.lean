@@ -15,12 +15,13 @@ import Mathlib.LinearAlgebra.Matrix.Block
 import Mathlib.LinearAlgebra.Matrix.ToLin
 import Mathlib.LinearAlgebra.FiniteDimensional.Basic
 import Mathlib.Algebra.Group.Invertible.Basic
-import Lean4Projekt.Basic
+import Lean4Projekt.Iter
 
 open Matrix
 
 variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜]
 variable {ι : Type*} [Fintype ι] [DecidableEq ι]
+
 
 def diag_dominant (M : Matrix ι ι 𝕜) :=
   ∀ i : ι, (∑ j ∈ Finset.univ.erase i, ‖M i j‖₊) < ‖M i i‖₊
@@ -33,12 +34,14 @@ noncomputable instance : NormedAddCommGroup (Matrix ι ι 𝕜) := Matrix.linfty
 instance : NormedSpace 𝕜 (Matrix ι ι 𝕜) := Matrix.linftyOpNormedSpace
 
 noncomputable def jacobi (hd : diag_dominant M) : ConvIter ι 𝕜 := by
+  /- Proof that `diag_dominant M` implies a nonzero diagonal-/
   have hnz : ∀ i ∈ Finset.univ, M.diag i ≠ 0 := by
     intro i _
     by_contra! h
     simp [diag_dominant] at *
     specialize hd i
     simp [h] at hd
+  /- Proof that a -/
   haveI : Invertible (diagonal M.diag) := by
     apply invertibleOfIsUnitDet
     rw [det_diagonal]
@@ -51,8 +54,10 @@ noncomputable def jacobi (hd : diag_dominant M) : ConvIter ι 𝕜 := by
     b := b
     inv := by infer_instance
     spec := by
+      -- Apply the definition of the L_infinity norm.
       rw [← linfty_opNNNorm_toMatrix, LinearMap.coe_toContinuousLinearMap, LinearMap.toMatrix'_toLin']
       rw [Matrix.linfty_opNNNorm_def, Finset.sup_lt_iff (by norm_num)]
+      -- prove the rest for each dimension separatly
       intro i _
       have h : M - diagonal M.diag = of fun i j => if i = j then 0 else M i j := by
         funext i j
