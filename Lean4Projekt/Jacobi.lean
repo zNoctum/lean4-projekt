@@ -56,7 +56,7 @@ noncomputable def jacobi (hd : diag_dominant M) : ConvIter ι 𝕜 := by
     spec := by
       -- Apply the definition of the L_infinity norm.
       rw [← linfty_opNNNorm_toMatrix, LinearMap.coe_toContinuousLinearMap, LinearMap.toMatrix'_toLin']
-      rw [Matrix.linfty_opNNNorm_def, Finset.sup_lt_iff (by norm_num)]
+      rw [linfty_opNNNorm_def, Finset.sup_lt_iff (by norm_num)]
       -- prove the rest for each dimension separatly
       intro i _
       have h : M - diagonal M.diag = of fun i j => if i = j then 0 else M i j := by
