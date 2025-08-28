@@ -20,13 +20,14 @@ import Mathlib.Data.Matrix.Basic
 import Mathlib.Data.Matrix.Invertible
 
 import Lean4Projekt.Basic
+import Lean4Projekt.MMatrix
 
 open Matrix
 
 -- Here we can't use a generic `𝕜` because we need the ability to multiply a value from the
 -- field with a norm from another i.e. `∀ r s : 𝕜, r * ‖s‖` which is only given if `𝕜 = ℝ`
 --variable {ℝ : Type*} [NontriviallyNormedField ℝ] [CompleteSpace ℝ] [LinearOrder ℝ] [IsOrderedAddMonoid ℝ] [ClosedIciTopology ℝ] [IsStrictOrderedRing ℝ] [NormedAlgebra ℝ ℝ]
-variable {ι : Type*} [Fintype ι] [DecidableEq ι]
+variable {ι : Type*} [Fintype ι] [DecidableEq ι] [Nonempty ι]
 
 noncomputable instance : NormedAddCommGroup (Matrix ι ι ℝ) := Matrix.linftyOpNormedAddCommGroup
 noncomputable instance : NormedSpace ℝ (Matrix ι ι ℝ) := Matrix.linftyOpNormedSpace
@@ -37,8 +38,8 @@ variable (M : Matrix ι ι ℝ)
 def matrix_abs := of (fun i j => |M i j|)
 notation "|" e "|" => matrix_abs e
 
-noncomputable def sassenfeld_circ := |1 - (diagonal M.diag)⁻¹ * M|
-postfix:max "°" => sassenfeld_circ
+noncomputable def circ := |1 - (diagonal M.diag)⁻¹ * M|
+postfix:max "°" => circ
 
 def is_preconditioner := ‖M°‖₊ < 1
 
@@ -187,7 +188,7 @@ theorem abs_mul_diagonal' (P : Matrix ι ι ℝ) : diagonal |P|.diag * |M| = |di
 theorem preconditioner_diag_ne_zero (P : Matrix ι ι ℝ) (hp : is_preconditioner P) (i : ι) : P i i ≠ 0 := by
   -- Proof by contradiction thus assuming `∃ i, P i i = 0`
   by_contra! h
-  dsimp only [is_preconditioner, sassenfeld_circ] at hp
+  dsimp only [is_preconditioner, circ] at hp
   rw [linfty_opNNNorm_def] at hp
   have : ∑ j, ‖|1 - (diagonal P.diag)⁻¹ * P| i j‖₊ < 1 := by
     apply lt_of_le_of_lt (Finset.le_sup (Finset.mem_univ i))
@@ -207,8 +208,8 @@ theorem abs_sub_comm' (N : Matrix ι ι ℝ) : |N - M| = |M - N| := by
   funext i j
   apply abs_sub_comm
 
-theorem sassenfeld_circ_alt_def {P : Matrix ι ι ℝ} (hp : is_preconditioner P) : P° = diagonal |P.diag⁻¹| * |off P| := by
-  dsimp only [sassenfeld_circ]
+theorem circ_alt_def {P : Matrix ι ι ℝ} (hp : is_preconditioner P) : P° = diagonal |P.diag⁻¹| * |off P| := by
+  dsimp only [circ]
   have : |off P| = |diagonal P.diag - P| := by
     simp [off, matrix_abs]
     funext i j
@@ -248,13 +249,21 @@ theorem mul_diagonl_inv_le (d v w : ι → ℝ) (hpos : ∀ i, 0 < d i) (h : dia
   rw [← mul_le_mul_iff_of_pos_left (hpos i), Pi.inv_apply, mul_inv_cancel_left₀ (ne_of_lt (hpos i)).symm]
   assumption
 
+theorem one_sub_circ_is_mmatrix {P : Matrix ι ι ℝ} (hp : is_preconditioner P) : MMatrix (1 - P°) := by
+  rw [mmatrix_def (1 - P°)]
+  use P°
+  use 1
+  refine ⟨?_, ?_, (by simp)⟩
+  · intro i j
+    rw [circ, matrix_abs, of_apply]
+    exact abs_nonneg ((1 - (diagonal P.diag)⁻¹ * P) i j)
+  · exact hp
+
 theorem matrix_one_sub_circ (P : Matrix ι ι ℝ) (hp : is_preconditioner P) : |(1 - P°)⁻¹| = (1 - P°)⁻¹ := by
   funext i j
   dsimp [matrix_abs]
   rw [abs_eq_self]
-  rw [sassenfeld_circ_alt_def hp]
-
-  sorry
+  exact (one_sub_circ_is_mmatrix hp).nonneg_inv i j
 
 noncomputable def sassenfeld_idx (P : Matrix ι ι ℝ) := ‖((1 - P°)⁻¹ * |diagonal P.diag|⁻¹ * |M - P|) *ᵥ 1‖₊
 
@@ -316,8 +325,7 @@ noncomputable def gauss_seidel
           exact le_trans this hny
 
         have : (|diagonal P.diag| * (1 - P°)) *ᵥ |x| ≤ |R| *ᵥ |y| := by
-          --refine le_trans ?_ (le_of_matrix_abs R y)
-          simp [mul_sub, sassenfeld_circ_alt_def hp]
+          simp [mul_sub, circ_alt_def hp]
           have : (diagonal fun i => |P|.diag i * |P.diag⁻¹| i) = 1 := by
             funext i j
             by_cases he : i = j
@@ -332,7 +340,6 @@ noncomputable def gauss_seidel
             · simp [diagonal_apply_ne, he]
           rw [abs_diag, ← mul_assoc, diagonal_mul_diagonal, this]
           simp
-
           sorry
 
         have : (|diagonal P.diag| * (1 - P°)) *ᵥ |x| ≤ |R| *ᵥ 1 := le_trans this hylt1
@@ -350,7 +357,7 @@ noncomputable def gauss_seidel
           apply matrix_abs_mulVec_monotone (1 - P°)⁻¹ at this
           rw [matrix_one_sub_circ P hp] at this
           simp at this
-          haveI I : Invertible (1 - P°) := by sorry
+          haveI I : Invertible (1 - P°) := (one_sub_circ_is_mmatrix hp).is_unit |> IsUnit.invertible
           rw [Matrix.inv_mul_of_invertible (1 - P°), one_mulVec, ← mulVec_mulVec, ← mulVec_mulVec] at this
           exact this
         simp [R, ← mul_assoc] at this
