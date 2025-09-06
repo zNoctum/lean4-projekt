@@ -63,16 +63,15 @@ theorem mon_iterate (n : ℕ) (v w : ι → ℝ) (h : v ≤ w) : |M|.mulVec^[n] 
   induction n with
   | zero => simp [*]
   | succ n ihn =>
-    rw [add_comm, Function.iterate_add_apply, Function.iterate_add_apply]
-    rw [Function.iterate_one]
-    rw [Pi.le_def]
+    rw [add_comm, Function.iterate_add_apply, Function.iterate_add_apply, Function.iterate_one]
     apply matrix_abs_mulVec_monotone
     assumption
 
 theorem le_of_matrix_abs (v : ι → ℝ) : |M *ᵥ v| ≤ |M| *ᵥ |v| := by
   rw [Pi.le_def]
   intro i
-  simp [mulVec_eq_sum]
+  simp only [mulVec_eq_sum, op_smul_eq_smul, Pi.abs_apply, Finset.sum_apply, Pi.smul_apply,
+    transpose_apply, smul_eq_mul]
   apply le_trans (show |∑ j, v j * M i j| ≤ ∑ j, |v j * M i j| by apply Finset.abs_sum_le_sum_abs (fun j => v j * M i j))
   refine Finset.sum_le_sum ?_
   intro j _
@@ -81,21 +80,18 @@ theorem le_of_matrix_abs (v : ι → ℝ) : |M *ᵥ v| ≤ |M| *ᵥ |v| := by
 
 theorem nnnorm_le_nnnorm_of_abs_le_abs (v w : ι → ℝ) (h : |v| ≤ |w|) : ‖v‖₊ ≤ ‖w‖₊ := by
   rw [Pi.nnnorm_def, Pi.nnnorm_def]
-  refine Finset.sup_mono_fun ?_
-  intro i _
-  exact h i
+  exact Finset.sup_mono_fun (fun i _ => h i)
 
 theorem nnnorm_le_nnnorm_of_abs_le (v w : ι → ℝ) (h : |v| ≤ w) : ‖v‖₊ ≤ ‖w‖₊ := by
   apply nnnorm_le_nnnorm_of_abs_le_abs
   intro i
   repeat rw [Pi.abs_apply]
-  by_cases hw : w i < 0
+  obtain hw | hw := lt_or_le (w i) 0
   · specialize h i
     rw [Pi.abs_apply] at h
     apply le_trans (abs_nonneg (v i)) at h
-    let contra := ne_of_lt <| lt_of_lt_of_le hw h
-    contradiction
-  · rw [abs_eq_self.mpr (le_of_not_lt hw)]
+    exact (ne_of_lt (lt_of_lt_of_le hw h) rfl).elim
+  · rw [abs_eq_self.mpr hw]
     exact h i
 
   -- Proof that all sassenfeld preconditioners are units. (Lemma 2.5 in the Paper)
@@ -185,7 +181,7 @@ theorem abs_mul_diagonal' (P : Matrix ι ι ℝ) : diagonal |P|.diag * |M| = |di
   simp [matrix_abs, mul_diagonal]
   rw [abs_mul]
 
-theorem preconditioner_diag_ne_zero (P : Matrix ι ι ℝ) (hp : IsPreconditioner P) (i : ι) : P i i ≠ 0 := by
+theorem preconditioner_diag_ne_zero {P : Matrix ι ι ℝ} (hp : IsPreconditioner P) (i : ι) : P i i ≠ 0 := by
   -- Proof by contradiction thus assuming `∃ i, P i i = 0`
   by_contra! h
   dsimp only [IsPreconditioner, circ] at hp
@@ -216,11 +212,11 @@ theorem circ_alt_def {P : Matrix ι ι ℝ} (hp : IsPreconditioner P) : P° = di
     rw [abs_sub_comm]
   rw [this, abs_mul_diagonal, mul_sub]
   simp
-  have hPnz (i) : P i i ≠ 0 := preconditioner_diag_ne_zero P hp i
+  have hPnz (i) := preconditioner_diag_ne_zero hp i
   have hu : IsUnit P.diag := by
     refine isUnit_diagonal.mp ?_
     rw [isUnit_iff_isUnit_det, det_diagonal]
-    rw [@IsUnit.prod_univ_iff]
+    rw [IsUnit.prod_univ_iff]
     intro i
     apply IsUnit.mk0
     rw [P.diag_apply]
@@ -238,7 +234,7 @@ theorem mul_diagonl_inv_le (d v w : ι → ℝ) (hpos : ∀ i, 0 < d i) (h : dia
   have : IsUnit d := by
     refine isUnit_diagonal.mp ?_
     rw [isUnit_iff_isUnit_det, det_diagonal]
-    rw [@IsUnit.prod_univ_iff]
+    rw [IsUnit.prod_univ_iff]
     intro i
     apply IsUnit.mk0
     exact (ne_of_lt (hpos i)).symm
@@ -263,7 +259,7 @@ theorem matrix_abs_eq_self {P : Matrix ι ι ℝ} (h : ∀ i j, 0 ≤ P i j) : |
   rw [matrix_abs, of_apply, abs_eq_self]
   exact h i j
 
-theorem skk (a b c: ℝ) (h : |c| ≤ a):
+theorem abs_le_add_abs_add (a b c: ℝ) (h : |c| ≤ a):
     |b| ≤ a + |b + c| := by
   by_cases hb : 0 ≤ b <;>
   by_cases hc : 0 ≤ c
@@ -272,6 +268,10 @@ theorem skk (a b c: ℝ) (h : |c| ≤ a):
   any_goals rw [abs_eq_self.mpr hc] at h
   any_goals rw [abs_eq_neg_self.mpr hc] at h
 
+  pick_goal 4
+  · rw [(abs_add_eq_add_abs_iff _ _).mpr (Or.inr ⟨hb, hc⟩)]
+    rw [abs_eq_neg_self.mpr hb, abs_eq_neg_self.mpr hc]
+    linarith
   · rw [(abs_add_eq_add_abs_iff b c).mpr (Or.inl ⟨hb, hc⟩)]
     rw [abs_eq_self.mpr hb, abs_eq_self.mpr hc]
     linarith
@@ -284,12 +284,9 @@ theorem skk (a b c: ℝ) (h : |c| ≤ a):
   · obtain bc | bc := le_total (b + c) 0
     · rw [abs_eq_neg_self.mpr bc, abs_eq_neg_self.mpr hb]
       rw [le_add_neg_iff_add_le]
-      simpa
+      linarith
     · rw [abs_eq_self.mpr bc, abs_eq_neg_self.mpr hb]
       linarith
-  · rw [(abs_add_eq_add_abs_iff _ _).mpr (Or.inr ⟨hb, hc⟩)]
-    rw [abs_eq_neg_self.mpr hb, abs_eq_neg_self.mpr hc]
-    linarith
 
 noncomputable def sassenfeld_idx (P : Matrix ι ι ℝ) := ‖((1 - P°)⁻¹ * |diagonal P.diag|⁻¹ * |M - P|) *ᵥ 1‖₊
 
@@ -344,7 +341,7 @@ noncomputable def gauss_seidel
         rw [Finset.prod_ne_zero_iff]
         -- which is already proven as `preconditioner_diag_ne_zero`
         intro i _
-        exact preconditioner_diag_ne_zero P hp i
+        exact preconditioner_diag_ne_zero hp i
 
       have hylt1 : |R| *ᵥ |y| ≤ |R| *ᵥ 1 := by
         -- use the fact that the entrywise abs of a matrix is monotone so we only have to prove:
@@ -364,30 +361,27 @@ noncomputable def gauss_seidel
         have : (diagonal fun i => |P|.diag i * |P.diag⁻¹| i) = 1 := by
           funext i j
           by_cases he : i = j
-          · simp [diagonal_apply_eq, he]
-            rw [abs_inv, matrix_abs, of_apply]
-            simp only [one_apply, he, ↓reduceIte, x, R]
-            haveI : Invertible |P j j| := by
-              refine invertibleOfNonzero ?_
-              apply abs_by_cases (· ≠ 0)
-              <;> simp [preconditioner_diag_ne_zero P hp j, *]
-            rw [mul_inv_cancel_of_invertible]
-          · simp [diagonal_apply_ne, he]
+          <;> simp [diagonal_apply_eq, he]
+          rw [abs_inv, matrix_abs, of_apply]
+          simp only [one_apply, he, ↓reduceIte, x, R]
+          haveI : Invertible |P j j| := by
+            refine invertibleOfNonzero ?_
+            apply abs_by_cases (· ≠ 0)
+            <;> simp [preconditioner_diag_ne_zero hp j, *]
+          rw [mul_inv_cancel_of_invertible]
         rw [abs_diag, ← mul_assoc, diagonal_mul_diagonal, this]
-        simp []
 
         refine le_trans ?_ (le_of_matrix_abs R y)
         rw [← hxry]
         apply (add_le_add_iff_left (|off P| *ᵥ |x|)).mp
-        rw [← add_mulVec]
-        rw [Pi.le_def]
+        rw [← add_mulVec, Pi.le_def]
         intro i
-        simp
+        simp only [one_mul, add_sub_cancel, Pi.add_apply, Pi.abs_apply, R, x]
         have (i) : (diagonal |P|.diag *ᵥ |x|) i = |(diagonal P.diag *ᵥ x) i| := by
           simp [mulVec_diagonal, matrix_abs, abs_mul]
         rw [this]
 
-        apply skk
+        apply abs_le_add_abs_add
 
         revert i
         rw [← Pi.le_def, ← Pi.abs_def]
@@ -400,18 +394,18 @@ noncomputable def gauss_seidel
         rw [abs_diag] at this ⊢
         apply mul_diagonl_inv_le
         · intro i
-          simp only [matrix_abs, diag_apply, of_apply, abs_pos, x, R]
-          exact preconditioner_diag_ne_zero P hp i
+          simpa only [matrix_abs, diag_apply, of_apply, abs_pos, R] using preconditioner_diag_ne_zero hp i
         · assumption
 
-      have : |x| ≤ (1 - P°)⁻¹ *ᵥ |diagonal P.diag|⁻¹ *ᵥ |R| *ᵥ 1 := by
+      have : |x| ≤ ((1 - P°)⁻¹ * |diagonal P.diag|⁻¹ * |R|) *ᵥ 1 := by
         apply matrix_abs_mulVec_monotone (1 - P°)⁻¹ at this
         rw [matrix_abs_eq_self ((one_sub_circ_is_mmatrix hp).nonneg_inv)] at this
-        simp at this
+        simp only [mulVec_mulVec] at this
         haveI I : Invertible (1 - P°) := (one_sub_circ_is_mmatrix hp).is_unit |> IsUnit.invertible
-        rw [Matrix.inv_mul_of_invertible (1 - P°), one_mulVec, ← mulVec_mulVec, ← mulVec_mulVec] at this
+        rw [Matrix.inv_mul_of_invertible (1 - P°), one_mulVec, ← mul_assoc] at this
         exact this
-      simp [R, ← mul_assoc] at this
-      rw [abs_sub_comm' M P] at this
+
+      rw [abs_sub_comm' P M]
+      rw [← show R = P - M from rfl]
       exact this
 }
