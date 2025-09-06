@@ -21,6 +21,7 @@ import Mathlib.Data.Matrix.Invertible
 
 import Lean4Projekt.Basic
 import Lean4Projekt.MMatrix
+import Lean4Projekt.Abs
 
 open Matrix
 
@@ -33,10 +34,6 @@ noncomputable instance : NormedAddCommGroup (Matrix ι ι ℝ) := Matrix.linftyO
 noncomputable instance : NormedSpace ℝ (Matrix ι ι ℝ) := Matrix.linftyOpNormedSpace
 
 variable (M : Matrix ι ι ℝ)
-
--- Elementwise absolute of a Matrix
-def matrix_abs := of (fun i j => |M i j|)
-notation "|" e "|" => matrix_abs e
 
 noncomputable def circ := |1 - (diagonal M.diag)⁻¹ * M|
 postfix:max "°" => circ
@@ -75,8 +72,7 @@ theorem le_of_matrix_abs (v : ι → ℝ) : |M *ᵥ v| ≤ |M| *ᵥ |v| := by
   apply le_trans (show |∑ j, v j * M i j| ≤ ∑ j, |v j * M i j| by apply Finset.abs_sum_le_sum_abs (fun j => v j * M i j))
   refine Finset.sum_le_sum ?_
   intro j _
-  dsimp [matrix_abs]
-  rw [abs_mul (v j) (M i j)]
+  rw [abs_apply, abs_mul (v j) (M i j)]
 
 theorem nnnorm_le_nnnorm_of_abs_le_abs (v w : ι → ℝ) (h : |v| ≤ |w|) : ‖v‖₊ ≤ ‖w‖₊ := by
   rw [Pi.nnnorm_def, Pi.nnnorm_def]
@@ -168,17 +164,17 @@ theorem preconditioner_isUnit (P : Matrix ι ι ℝ) (h : IsPreconditioner P) : 
 
 theorem abs_diag : |diagonal M.diag| = diagonal |M|.diag := by
   funext i j
-  simp [matrix_abs, diagonal]
+  simp [abs_apply, diagonal]
   by_cases h : i = j <;> simp [*]
 
 theorem abs_mul_diagonal (d : ι → ℝ) : diagonal |d| * |M| = |diagonal d * M| := by
   funext i j
-  simp [matrix_abs, mul_diagonal]
+  simp [abs_apply, mul_diagonal]
   rw [abs_mul]
 
 theorem abs_mul_diagonal' (P : Matrix ι ι ℝ) : diagonal |P|.diag * |M| = |diagonal P.diag * M| := by
   funext i j
-  simp [matrix_abs, mul_diagonal]
+  simp [abs_apply, mul_diagonal]
   rw [abs_mul]
 
 theorem preconditioner_diag_ne_zero {P : Matrix ι ι ℝ} (hp : IsPreconditioner P) (i : ι) : P i i ≠ 0 := by
@@ -195,14 +191,9 @@ theorem preconditioner_diag_ne_zero {P : Matrix ι ι ℝ} (hp : IsPreconditione
     · simp [Ring.inverse_non_unit P.diag hu, h]
   -- Use the fact that `diagonal P.diag i = 0`
   -- this implies `P° i i = 1` which further implies `1 ≤ ‖P°‖₊` which is a contradiction to `hp`
-  simp only [matrix_abs, inv_diagonal, sub_apply, diagonal_mul, of_apply, Real.nnnorm_abs] at this
+  simp only [abs_apply, inv_diagonal, sub_apply, diagonal_mul, of_apply, Real.nnnorm_abs] at this
   rw [h', diag_apply, h, Ring.inverse_zero] at this
   simp [one_apply, nnnorm_one, ← Finset.sum_erase_add _ _ (Finset.mem_univ i)] at this
-
-theorem abs_sub_comm' (N : Matrix ι ι ℝ) : |N - M| = |M - N| := by
-  simp [matrix_abs]
-  funext i j
-  apply abs_sub_comm
 
 theorem circ_alt_def {P : Matrix ι ι ℝ} (hp : IsPreconditioner P) : P° = diagonal |P.diag⁻¹| * |off P| := by
   dsimp only [circ]
@@ -251,12 +242,12 @@ theorem one_sub_circ_is_mmatrix {P : Matrix ι ι ℝ} (hp : IsPreconditioner P)
   refine ⟨(by simpa using hp), ?_⟩
   intro i j
   simp only [one_smul, sub_apply, sub_sub_cancel]
-  rw [circ, matrix_abs, of_apply]
+  rw [circ, abs_apply]
   exact abs_nonneg ((1 - (diagonal P.diag)⁻¹ * P) i j)
 
 theorem matrix_abs_eq_self {P : Matrix ι ι ℝ} (h : ∀ i j, 0 ≤ P i j) : |P| = P := by
   funext i j
-  rw [matrix_abs, of_apply, abs_eq_self]
+  rw [abs_apply, abs_eq_self]
   exact h i j
 
 theorem abs_le_add_abs_add (a b c: ℝ) (h : |c| ≤ a):
@@ -362,7 +353,7 @@ noncomputable def gauss_seidel
           funext i j
           by_cases he : i = j
           <;> simp [diagonal_apply_eq, he]
-          rw [abs_inv, matrix_abs, of_apply]
+          rw [abs_inv, abs_apply]
           simp only [one_apply, he, ↓reduceIte, x, R]
           haveI : Invertible |P j j| := by
             refine invertibleOfNonzero ?_
@@ -378,7 +369,7 @@ noncomputable def gauss_seidel
         intro i
         simp only [one_mul, add_sub_cancel, Pi.add_apply, Pi.abs_apply, R, x]
         have (i) : (diagonal |P|.diag *ᵥ |x|) i = |(diagonal P.diag *ᵥ x) i| := by
-          simp [mulVec_diagonal, matrix_abs, abs_mul]
+          simp [mulVec_diagonal, abs_apply, abs_mul]
         rw [this]
 
         apply abs_le_add_abs_add
@@ -394,7 +385,7 @@ noncomputable def gauss_seidel
         rw [abs_diag] at this ⊢
         apply mul_diagonl_inv_le
         · intro i
-          simpa only [matrix_abs, diag_apply, of_apply, abs_pos, R] using preconditioner_diag_ne_zero hp i
+          simpa only [abs_apply, diag_apply, abs_pos, R] using preconditioner_diag_ne_zero hp i
         · assumption
 
       have : |x| ≤ ((1 - P°)⁻¹ * |diagonal P.diag|⁻¹ * |R|) *ᵥ 1 := by
@@ -405,7 +396,7 @@ noncomputable def gauss_seidel
         rw [Matrix.inv_mul_of_invertible (1 - P°), one_mulVec, ← mul_assoc] at this
         exact this
 
-      rw [abs_sub_comm' P M]
+      rw [abs_sub_comm M P]
       rw [← show R = P - M from rfl]
       exact this
 }
