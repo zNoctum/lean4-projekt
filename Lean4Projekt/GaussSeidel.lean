@@ -198,7 +198,7 @@ theorem preconditioner_diag_ne_zero {P : Matrix ι ι ℝ} (hp : IsPreconditione
 theorem circ_alt_def {P : Matrix ι ι ℝ} (hp : IsPreconditioner P) : P° = diagonal |P.diag⁻¹| * |off P| := by
   dsimp only [circ]
   have : |off P| = |diagonal P.diag - P| := by
-    simp [off, matrix_abs]
+    simp [off, abs_apply]
     funext i j
     rw [abs_sub_comm]
   rw [this, abs_mul_diagonal, mul_sub]
